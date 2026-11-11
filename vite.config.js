@@ -42,6 +42,9 @@ function workspaceEntry(usePublishedPlayer = false) {
 </script></html>`;
 }
 
+// fs.cp entrega rutas con barras invertidas en Windows; los filtros comparan con '/'.
+const posixPath = path => path.replace(/\\/g, '/');
+
 async function convertModelScripts(sourceDir, outputDir) {
   const entries = await readdir(sourceDir, { withFileTypes: true });
   await mkdir(outputDir, { recursive: true });
@@ -100,10 +103,10 @@ export default defineConfig({
       });
     },
     async closeBundle() {
-      await cp(`${root}dental/vendor`, `${root}dist/dental/vendor`, { recursive: true, filter: source => !source.includes('/vendor/src') });
+      await cp(`${root}dental/vendor`, `${root}dist/dental/vendor`, { recursive: true, filter: source => !posixPath(source).includes('/vendor/src') });
       for (const directory of ['assets', 'thumbs', 'dental/models']) {
         const filter = directory === 'assets'
-          ? source => !source.endsWith('/full_body.glb') && !source.endsWith('.js')
+          ? source => !posixPath(source).endsWith('/full_body.glb') && !source.endsWith('.js')
           : undefined;
         await cp(`${root}${directory}`, `${root}dist/${directory}`, { recursive: true, filter });
       }
