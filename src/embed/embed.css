@@ -1,0 +1,34 @@
+/* SemioLab 3D · modo embed (?embed=1).
+   Oculta toda la interfaz nativa de BodyVista y deja sólo el lienzo 3D:
+   la aplicación anfitriona controla el visor por el puente postMessage. */
+body.embed { margin: 0; overflow: hidden; }
+body.embed .app-header,
+body.embed #muscle-panel,
+body.embed #sidebar,
+body.embed #inspector,
+body.embed #mobile-layers,
+body.embed #restore-knowledge,
+body.embed #restore-activity,
+body.embed #edit-tools,
+body.embed #mode-bar,
+body.embed #toggle-view-navigation,
+body.embed #view-navigation,
+body.embed #scene-actions,
+body.embed #playback-bar,
+body.embed #selection-tray,
+body.embed #slice-bar,
+body.embed #quiz,
+body.embed #ask-chatgpt,
+body.embed #ask-deepseek,
+body.embed #github-link,
+body.embed #bug-feedback,
+body.embed footer.tools,
+body.embed #share-site,
+body.embed .canvas-corner,
+body.embed .overlay { display: none !important; }
+body.embed #workspace {
+  display: block !important;
+  height: 100dvh !important;
+  grid-template-columns: none !important;
+}
+body.embed #canvas-area { height: 100%; }
