@@ -32,3 +32,6 @@ body.embed #workspace {
   grid-template-columns: none !important;
 }
 body.embed #canvas-area { height: 100%; }
+/* Modos de marcado y examen: el cursor indica que un clic ubica algo. */
+body.embed[data-modo^="marcar"] canvas,
+body.embed[data-modo="examinar"] canvas { cursor: crosshair; }
