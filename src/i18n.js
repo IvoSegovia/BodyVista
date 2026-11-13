@@ -13,6 +13,10 @@ export function registerNames(parts) {
   for (const part of parts) if (anatomy[part.name]) names.set(part.name, anatomy[part.name]);
 }
 export function partName(part, locale = language) {
+  if (derived && locale === language) {
+    const base = anatomy[part.name]?.[0];
+    return base ? derived.translate(base) || base : t('名称未设置');
+  }
   return locale === 'zh-CN' ? part.name : anatomy[part.name]?.[locale === 'en' ? 0 : 1] || t('名称未设置');
 }
 export function setText(element, source) {
@@ -30,7 +34,27 @@ export function formatDate(value) {
   }
   return Number.isNaN(date.getTime()) ? String(value).replace(/上午/g,'AM').replace(/下午/g,'PM') : new Intl.DateTimeFormat(language, {dateStyle:'medium', timeStyle:'short'}).format(date);
 }
+// SemioLab 3D: idioma derivado (p. ej. español en modo embed). Traduce sobre
+// el idioma base (inglés): fuente china → base → derivado, y si el derivado no
+// tiene la frase devuelve la del idioma base. Mientras está activo, ningún
+// pedido de cambio (?lang, localStorage, selector) puede volver a zh-CN o ja.
+let derived = null;
+export function useDerivedLanguage(config) {
+  derived = config;
+  language = config.base;
+  document.documentElement.lang = config.code;
+  document.documentElement.dataset.idioma = config.code;
+  translateDOM();
+  document.dispatchEvent(new CustomEvent('atlas:language'));
+}
 export function t(value) {
+  const base = traducirBase(value);
+  if (!derived) return base;
+  const key = base.trim();
+  const result = key ? derived.translate(key) : undefined;
+  return result ? base.replace(key, result) : base;
+}
+function traducirBase(value) {
   const text = String(value ?? '');
   if (language === 'zh-CN') return text;
   const key = text.trim(), slot = language === 'en' ? 0 : 1;
@@ -38,27 +62,27 @@ export function t(value) {
   const format = (en, ja) => language === 'en' ? en : ja;
   if (!result) {
     let match;
-    if ((match = key.match(/^(.+)（已隐藏）$/)) && !/、| · /.test(match[1])) result = `${t(match[1])} ${t('（已隐藏）')}`;
-    else if ((match = key.match(/^正在载入 (.+)…$/))) result = format(`Loading ${t(match[1])}…`,`${t(match[1])} を読み込み中…`);
-    else if ((match = key.match(/^(.+)加载超时$/))) result = format(`Loading ${t(match[1])} timed out`,`${t(match[1])} の読み込みがタイムアウトしました`);
+    if ((match = key.match(/^(.+)（已隐藏）$/)) && !/、| · /.test(match[1])) result = `${traducirBase(match[1])} ${traducirBase('（已隐藏）')}`;
+    else if ((match = key.match(/^正在载入 (.+)…$/))) result = format(`Loading ${traducirBase(match[1])}…`,`${traducirBase(match[1])} を読み込み中…`);
+    else if ((match = key.match(/^(.+)加载超时$/))) result = format(`Loading ${traducirBase(match[1])} timed out`,`${traducirBase(match[1])} の読み込みがタイムアウトしました`);
     else if ((match = key.match(/^(操作未完成：|模型加载失败：|所属系统：|此动态所需的结构不完整：|找不到 )(.+)$/))) {
-      const detail = t(match[2]);
-      result = t(match[1]) + (language === 'en' ? ' ' : '') + (detail === match[2] && !names.has(match[2]) && !translateAuthoredText(match[2], slot) && /操作未完成|模型加载失败/.test(match[1]) ? t('请重试；如仍失败，请重新加载页面。') : detail);
+      const detail = traducirBase(match[2]);
+      result = traducirBase(match[1]) + (language === 'en' ? ' ' : '') + (detail === match[2] && !names.has(match[2]) && !translateAuthoredText(match[2], slot) && /操作未完成|模型加载失败/.test(match[1]) ? traducirBase('请重试；如仍失败，请重新加载页面。') : detail);
     }
     else if ((match = key.match(/^(\d+) \/ (\d+) 个结构$/))) result = format(`${match[1]} / ${match[2]} structures`,`${match[1]} / ${match[2]} 構造`);
     else if ((match = key.match(/^(\d+) 个(匹配结构|结构)$/))) result = format(`${match[1]} structures`,`${match[1]} 件の構造`);
     else if ((match = key.match(/^已选 (\d+)$/))) result = format(`${match[1]} selected`,`${match[1]} 件選択`);
     else if ((match = key.match(/^第 (\d+) \/ (\d+) 题 · 已答对 (\d+) 题$/))) result = format(`Question ${match[1]} / ${match[2]} · ${match[3]} correct`,`第 ${match[1]} / ${match[2]} 問・${match[3]} 問正解`);
     else if ((match = key.match(/^答对 (\d+) \/ (\d+) 题$/))) result = format(`${match[1]} / ${match[2]} correct`,`${match[1]} / ${match[2]} 問正解`);
-    else if ((match = key.match(/^(减少|增加|筛选)(.+)$/))) result = format(`${{减少:'Decrease',增加:'Increase',筛选:'Filter'}[match[1]]} ${t(match[2])}`,`${t(match[2])}${{减少:'を減らす',增加:'を増やす',筛选:'で絞り込む'}[match[1]]}`);
-    else if ((match = key.match(/^(.+)：(隐藏|轮廓|半透明|实体)$/))) result = `${t(match[1])}: ${t(match[2])}`;
-    else if ((match = key.match(/^(找到：|✓ |已添加 |找到了：)(.+)$/))) result = format(`${{'找到：':'Find: ','✓ ':'✓ ','已添加 ':'Added: ','找到了：':'Found: '}[match[1]]}${t(match[2])}`,`${{'找到：':'探す：','✓ ':'✓ ','已添加 ':'追加：','找到了：':'発見：'}[match[1]]}${t(match[2])}`);
-    else if ((match = key.match(/^(.+) · 观察笔记$/))) result = `${t(match[1])} · ${t('观察笔记')}`;
+    else if ((match = key.match(/^(减少|增加|筛选)(.+)$/))) result = format(`${{减少:'Decrease',增加:'Increase',筛选:'Filter'}[match[1]]} ${traducirBase(match[2])}`,`${traducirBase(match[2])}${{减少:'を減らす',增加:'を増やす',筛选:'で絞り込む'}[match[1]]}`);
+    else if ((match = key.match(/^(.+)：(隐藏|轮廓|半透明|实体)$/))) result = `${traducirBase(match[1])}: ${traducirBase(match[2])}`;
+    else if ((match = key.match(/^(找到：|✓ |已添加 |找到了：)(.+)$/))) result = format(`${{'找到：':'Find: ','✓ ':'✓ ','已添加 ':'Added: ','找到了：':'Found: '}[match[1]]}${traducirBase(match[2])}`,`${{'找到：':'探す：','✓ ':'✓ ','已添加 ':'追加：','找到了：':'発見：'}[match[1]]}${traducirBase(match[2])}`);
+    else if ((match = key.match(/^(.+) · 观察笔记$/))) result = `${traducirBase(match[1])} · ${traducirBase('观察笔记')}`;
     else if ((match = key.match(/^(.*)% 全身高度$/))) result = format(`${match[1]}% of body height`, `全身高の ${match[1]}%`);
-    else if ((match = key.match(/^这是(.+)，继续寻找(.+)。$/))) result = format(`This is ${t(match[1])}. Keep looking for ${t(match[2])}.`,`これは ${t(match[1])} です。${t(match[2])} を探してください。`);
-    else if ((match = key.match(/^(回答正确。|再记一次。)正确答案：(.+)。所属系统：(.+)。$/))) result = format(`${t(match[1])} Answer: ${t(match[2])}. System: ${t(match[3])}.`,`${t(match[1])} 正解：${t(match[2])}。系統：${t(match[3])}。`);
-    if(!result && (key.startsWith('回答正确。') || key.startsWith('再记一次。'))) { const prefix = key.startsWith('回答正确。') ? '回答正确。' : '再记一次。'; result = t(prefix) + ' ' + t(key.slice(prefix.length)); }
-    if (!result && /、| · /.test(key)) result = key.split(/、| · /).map(piece => t(piece)).join(format(' · ', '・'));
+    else if ((match = key.match(/^这是(.+)，继续寻找(.+)。$/))) result = format(`This is ${traducirBase(match[1])}. Keep looking for ${traducirBase(match[2])}.`,`これは ${traducirBase(match[1])} です。${traducirBase(match[2])} を探してください。`);
+    else if ((match = key.match(/^(回答正确。|再记一次。)正确答案：(.+)。所属系统：(.+)。$/))) result = format(`${traducirBase(match[1])} Answer: ${traducirBase(match[2])}. System: ${traducirBase(match[3])}.`,`${traducirBase(match[1])} 正解：${traducirBase(match[2])}。系統：${traducirBase(match[3])}。`);
+    if(!result && (key.startsWith('回答正确。') || key.startsWith('再记一次。'))) { const prefix = key.startsWith('回答正确。') ? '回答正确。' : '再记一次。'; result = traducirBase(prefix) + ' ' + traducirBase(key.slice(prefix.length)); }
+    if (!result && /、| · /.test(key)) result = key.split(/、| · /).map(piece => traducirBase(piece)).join(format(' · ', '・'));
   }
   return result ? text.replace(key, result) : text;
 }
@@ -96,6 +120,7 @@ export function translateDOM(root = document.body) {
   }
 }
 export function setLanguage(next) {
+  if (derived) { translateDOM(); return; }
   if (!languages.includes(next)) return;
   language = next;
   try { localStorage.setItem('atlas-language', language); } catch {}

@@ -57,29 +57,37 @@ export function iniciarPuente(ventana, { visor, escena, guardrail, hotspots, des
     enviar({ type: 'state', vista: visor.getState() });
   }
 
+  // Los cambios de vista son asíncronos: se aplican en orden de llegada, cada
+  // uno sobre el estado que dejó el anterior. Sin la cola, un restore lento
+  // que termina después de showMicro saca al visor de la escena microscópica.
+  let cola = Promise.resolve();
+  const enCola = tarea => {
+    cola = cola.then(tarea).catch(error => console.warn('[puente] error al aplicar', error));
+  };
+
   // Cada manejador valida su carga y devuelve false si no cumple el contrato.
   const manejadores = {
     restore(m) {
       if (!esObjeto(m.vista) || !esObjeto(m.vista.layers)) return false;
-      void guardrail.restore(m.vista).then(emitirEstado);
+      enCola(() => guardrail.restore(m.vista).then(emitirEstado));
       return true;
     },
     setLayers(m) {
       if (!esObjeto(m.capas) || !Object.values(m.capas).every(esNivel)) return false;
-      void guardrail.setLayers(m.capas).then(emitirEstado);
+      enCola(() => guardrail.setLayers(m.capas).then(emitirEstado));
       return true;
     },
     showSection(m) {
       if (!EJES.has(m.axis) || !esNumero(m.section) || m.section < 0 || m.section > 100) return false;
-      void Promise.resolve(visor.showSection(m.axis))
+      enCola(() => Promise.resolve(visor.showSection(m.axis))
         .then(() => visor.restore({ ...visor.getState(), axis: m.axis, section: m.section }))
-        .then(() => { escena.pedirCuadro(); return emitirEstado(); });
+        .then(() => { escena.pedirCuadro(); return emitirEstado(); }));
       return true;
     },
     showMicro(m) {
       if (m.key !== null && !ESCENAS_MICRO.has(m.key)) return false;
-      const accion = m.key === null ? visor.restore({ ...visor.getState(), micro: null }) : visor.showMicro(m.key);
-      void Promise.resolve(accion).then(() => { guardrail.marcarMicro(m.key !== null); return emitirEstado(); });
+      enCola(() => Promise.resolve(m.key === null ? visor.restore({ ...visor.getState(), micro: null }) : visor.showMicro(m.key))
+        .then(() => { guardrail.marcarMicro(m.key !== null); return emitirEstado(); }));
       return true;
     },
     setHotspots(m) {

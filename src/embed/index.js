@@ -6,6 +6,8 @@ import { crearEscena, describirParte, sistemasDeParte } from './escena.js';
 import { iniciarGuardrail } from './guardrail.js';
 import { crearCapaHotspots } from './hotspots.js';
 import { exponerCalibracion } from './perf.js';
+import { fijarEspanol } from './idioma.js';
+import { translateDOM, useDerivedLanguage } from '../i18n.js';
 
 const parametros = new URLSearchParams(location.search);
 
@@ -14,6 +16,7 @@ async function iniciarEmbed(ventana, { perf }) {
   if (!visor) { console.error('[embed] window.BodyVista no está disponible'); return; }
   await cuandoEsteCargado(ventana.document);
   await visor.whenIdle();
+  translateDOM(); // texto que main.js armó durante la carga
 
   const escena = crearEscena(visor);
   const embebido = ventana.parent !== ventana;
@@ -49,5 +52,10 @@ async function iniciarEmbed(ventana, { perf }) {
 
 if (parametros.get('embed') === '1') {
   document.body.classList.add('embed');
+  try {
+    fijarEspanol(window, useDerivedLanguage);
+  } finally {
+    document.documentElement.style.removeProperty('visibility'); // ver index.html
+  }
   iniciarEmbed(window, { perf: parametros.get('perf') === '1' }).catch(error => console.error('[embed]', error));
 }

@@ -19,7 +19,8 @@ export function collectDisplayContent(root = new URL('../', import.meta.url)) {
     }
     walk(parseAst(readFileSync(new URL(file, root), 'utf8')));
   }
-  const html = readFileSync(new URL('index.html', root), 'utf8').replace(/<!--[^]*?-->/g, '');
+  // Inline <script>/<style> bodies are code, not display content.
+  const html = readFileSync(new URL('index.html', root), 'utf8').replace(/<!--[^]*?-->/g, '').replace(/<(script|style)\b[^>]*>[^]*?<\/\1>/g, '');
   for (const match of html.matchAll(/>([^<>]+)</g)) add(match[1]);
   for (const match of html.matchAll(/(?:aria-label|title|placeholder|alt|label)="([^"]+)"/g)) add(match[1]);
   return [...values];
