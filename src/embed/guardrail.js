@@ -142,6 +142,49 @@ export class MonitorFps {
 }
 
 // ---------------------------------------------------------------------------
+// Render a demanda (G8) con tope de cuadros
+// ---------------------------------------------------------------------------
+
+export const FPS_MAXIMO = 60;
+/** Margen para que un rAF que llega apenas antes de 1/60 s no pierda el cuadro (pantallas de 120/144/240 Hz). */
+const INTERVALO_MINIMO_MS = 1000 / FPS_MAXIMO - 2;
+/** En reposo se dibuja igual un cuadro por segundo: cubre cambios internos de BodyVista que no se detectan. */
+export const CUADRO_SEGURIDAD_MS = 1000;
+
+/**
+ * ¿Se dibuja este cuadro? Nunca más de 60 por segundo; en reposo (sin cambio
+ * de cámara ni de lienzo, sin cuadro pedido, sin interacción ni escena
+ * animada) sólo el cuadro de seguridad.
+ */
+export function decidirCuadro({ ahora, ultimoCuadro, cambio, pedido, interactuando, animando }) {
+  const transcurrido = ahora - ultimoCuadro;
+  if (transcurrido < INTERVALO_MINIMO_MS) return false;
+  if (cambio || pedido || interactuando || animando) return true;
+  return transcurrido >= CUADRO_SEGURIDAD_MS;
+}
+
+/**
+ * Variación de matriz por debajo de la cual la imagen no cambia. La
+ * amortiguación de OrbitControls deja la cámara moviéndose en cantidades
+ * ínfimas que nunca llegan a cero: sin tolerancia, el reposo no existiría.
+ */
+export const TOLERANCIA_CAMARA = 1e-6;
+
+/** Firma de lo que cambia la imagen sin pasar por el embed: matrices de la cámara y tamaño del lienzo. */
+export function crearFirmaCuadro() {
+  let anterior = null;
+  const leer = (camara, lienzo) => [...camara.matrixWorld.elements, ...camara.projectionMatrix.elements, lienzo.width, lienzo.height];
+  return {
+    cambio(camara, lienzo) {
+      if (anterior === null) return true;
+      const actual = leer(camara, lienzo);
+      return actual.some((valor, i) => Math.abs(valor - anterior[i]) > TOLERANCIA_CAMARA);
+    },
+    guardar(camara, lienzo) { anterior = leer(camara, lienzo); },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Ejecución dentro del visor
 // ---------------------------------------------------------------------------
 
@@ -161,6 +204,10 @@ export function iniciarGuardrail(visor, escena, { sistemasDeParte, alAtenuar, al
     pausadoPorApp: false,
     pausadoPorInactividad: false,
     animacionesPausadas: false,
+    /** Escena microscópica abierta: anima en cada cuadro, así que se dibuja (con tope). */
+    microActiva: false,
+    /** Cuadros dibujados por motivo (calibración, ?perf=1). */
+    motivosCuadro: {},
     ultimaInteraccion: performance.now(),
   };
   const monitor = new MonitorFps();
@@ -169,17 +216,41 @@ export function iniciarGuardrail(visor, escena, { sistemasDeParte, alAtenuar, al
   // G7: una sola animación y nunca desde el puente; playActivity queda deshabilitado en embed.
   visor.playActivity = () => Promise.resolve();
 
-  /** Envuelve renderer.render una sola vez: pausa (G7/setQuality) sin tocar el bucle de BodyVista. */
+  /**
+   * Envuelve renderer.render una sola vez, sin tocar el bucle de BodyVista
+   * (main.js dibuja en cada rAF): pausa (G7/setQuality) y render a demanda con
+   * tope de 60 cuadros/s (G8). Un cuadro pedido por el embed que cae dentro
+   * del tope queda pendiente y sale en el siguiente rAF.
+   */
   function envolverRenderer(renderer) {
     if (rendererEnvuelto === renderer) return;
     rendererEnvuelto = renderer;
     renderer.setPixelRatio(estado.pixelRatio);
     const dibujar = renderer.render.bind(renderer);
+    const firma = crearFirmaCuadro();
+    const cuadro = { ultimo: -Infinity, pendiente: true };
+    const motivos = estado.motivosCuadro;
     renderer.render = (escenaThree, camara) => {
-      const interactuando = performance.now() - estado.ultimaInteraccion < 200;
+      const ahora = performance.now();
+      const interactuando = ahora - estado.ultimaInteraccion < 200;
       if (estado.pausadoPorApp || estado.pausadoPorInactividad) return;
-      if (estado.animacionesPausadas && !interactuando && !escena.contexto.cuadroPropio) return;
+      if (escena.contexto.cuadroPropio) cuadro.pendiente = true;
+      if (estado.animacionesPausadas && !interactuando && !cuadro.pendiente) return;
+      const lienzo = renderer.domElement;
+      const condiciones = {
+        cambio: firma.cambio(camara, lienzo),
+        pedido: cuadro.pendiente,
+        interactuando,
+        animando: estado.microActiva && !estado.animacionesPausadas,
+      };
+      const dibuja = decidirCuadro({ ahora, ultimoCuadro: cuadro.ultimo, ...condiciones });
+      if (!dibuja) return;
+      const motivo = Object.keys(condiciones).find(clave => condiciones[clave]) ?? 'seguridad';
+      motivos[motivo] = (motivos[motivo] ?? 0) + 1;
+      cuadro.ultimo = ahora;
+      cuadro.pendiente = false;
       dibujar(escenaThree, camara);
+      firma.guardar(camara, lienzo);
     };
   }
 
@@ -259,6 +330,7 @@ export function iniciarGuardrail(visor, escena, { sistemasDeParte, alAtenuar, al
       const encendidas = Object.keys(vista.layers).filter(s => vista.layers[s] > 0);
       estado.orden = estado.orden.filter(s => encendidas.includes(s));
       const recorte = recortarVista(vista, estado.orden, sistemasProtegidos(vista, sistemasDeParte));
+      estado.microActiva = Boolean(recorte.vista.micro);
       await restaurar(recorte.vista);
       avisar(recorte.atenuadas, recorte.vista.layers);
     },
@@ -269,6 +341,17 @@ export function iniciarGuardrail(visor, escena, { sistemasDeParte, alAtenuar, al
       if (!pausar) registrarInteraccion();
       escena.pedirCuadro();
     },
+    /** `showMicro` del puente: con escena microscópica el visor anima y debe dibujar. */
+    marcarMicro(activa) {
+      estado.microActiva = activa;
+      escena.pedirCuadro();
+    },
     registrarInteraccion,
+    /** Cuadros dibujados por motivo desde la última lectura (calibración). */
+    leerMotivosCuadro() {
+      const copia = { ...estado.motivosCuadro };
+      for (const clave of Object.keys(estado.motivosCuadro)) delete estado.motivosCuadro[clave];
+      return copia;
+    },
   };
 }

@@ -79,7 +79,7 @@ export function iniciarPuente(ventana, { visor, escena, guardrail, hotspots, des
     showMicro(m) {
       if (m.key !== null && !ESCENAS_MICRO.has(m.key)) return false;
       const accion = m.key === null ? visor.restore({ ...visor.getState(), micro: null }) : visor.showMicro(m.key);
-      void Promise.resolve(accion).then(() => { escena.pedirCuadro(); return emitirEstado(); });
+      void Promise.resolve(accion).then(() => { guardrail.marcarMicro(m.key !== null); return emitirEstado(); });
       return true;
     },
     setHotspots(m) {

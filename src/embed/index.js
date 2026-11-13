@@ -36,10 +36,11 @@ async function iniciarEmbed(ventana, { perf }) {
   const hotspots = crearCapaHotspots(escena, {
     modoActual: modo.actual,
     alMover: movido => enviar({ type: 'hotspotMoved', ...movido }),
+    alTocar: id => enviar({ type: 'hotspotClicked', id }),
   });
   escena.pedirCuadro();
 
-  if (perf) exponerCalibracion(ventana, visor, escena);
+  if (perf) exponerCalibracion(ventana, visor, escena, { hotspots, describirParte, guardrail });
   if (!embebido) return; // Sin anfitrión no hay a quién avisar.
 
   enviar = iniciarPuente(ventana, { visor, escena, guardrail, hotspots, describirParte, modo });

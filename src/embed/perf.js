@@ -4,7 +4,7 @@
 // cuadro por frame durante `ms` y devuelve FPS promedio, triángulos y llamadas.
 import * as THREE from '../vendor/three.js';
 
-export function exponerCalibracion(ventana, visor, escena) {
+export function exponerCalibracion(ventana, visor, escena, { hotspots, describirParte, guardrail }) {
   ventana.SemiolabPerf = {
     async medir(vista, ms = 5000) {
       await visor.restore(vista);
@@ -35,5 +35,17 @@ export function exponerCalibracion(ventana, visor, escena) {
       return { fps: Math.round((cuadros / (ms / 1000)) * 10) / 10, triangulos, llamadas, pixelRatio: renderer.getPixelRatio() };
     },
     estado: () => visor.getState(),
+    /** Cuadros dibujados por motivo (cambio de cámara, pedido, interacción, animación, seguridad). */
+    motivosCuadro: () => guardrail.leerMotivosCuadro(),
+    /** Herramienta de autor (scripts/anclas-generar.mjs): qué estructura y punto de piel hay bajo (x, y) del lienzo. */
+    tocar(clientX, clientY) {
+      const tocado = escena.tocarCuerpo({ clientX, clientY });
+      return tocado ? { ...tocado, regiones: describirParte(tocado.part_id)?.regiones ?? [] } : null;
+    },
+    /** Dibuja hotspots sin pasar por el puente (captura de evidencia). */
+    mostrarHotspots(lista) {
+      hotspots.setHotspots(lista, null);
+      escena.pedirCuadro();
+    },
   };
 }

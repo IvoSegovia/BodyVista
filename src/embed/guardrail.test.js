@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  LIMITES, MonitorFps, recortarSetLayers, recortarVista, siguientePasoDegradacion, sistemasProtegidos,
+  CUADRO_SEGURIDAD_MS, FPS_MAXIMO, LIMITES, TOLERANCIA_CAMARA, MonitorFps, crearFirmaCuadro, decidirCuadro, recortarSetLayers, recortarVista, siguientePasoDegradacion, sistemasProtegidos,
 } from './guardrail.js';
 
 const neutra = { skeletal: 0, muscular: 0, cardiovascular: 0, nervous: 0, respiratory: 0, skin: 3 };
@@ -85,4 +85,63 @@ test('MonitorFps degrada tras 3 s por debajo de 24 FPS y no en reposo', () => {
   const fluido = new MonitorFps();
   for (let u = 0; u <= 5000; u += 16) { fluido.registrar(u); assert.equal(fluido.debeDegradar(u), false); }
   assert.equal(fluido.debeDegradar(9000), false); // reposo: sin cuadros no hay degradación
+});
+
+// ---- Render a demanda (G8) con tope de 60 cuadros/s ----
+
+const reposo = { cambio: false, pedido: false, interactuando: false, animando: false };
+
+test('G8: en reposo sólo dibuja el cuadro de seguridad, una vez por segundo', () => {
+  assert.equal(decidirCuadro({ ...reposo, ahora: 500, ultimoCuadro: 0 }), false);
+  assert.equal(decidirCuadro({ ...reposo, ahora: CUADRO_SEGURIDAD_MS, ultimoCuadro: 0 }), true);
+});
+
+test('G8: cambio de cámara, cuadro pedido, interacción o escena animada dibujan', () => {
+  for (const motivo of ['cambio', 'pedido', 'interactuando', 'animando']) {
+    assert.equal(decidirCuadro({ ...reposo, [motivo]: true, ahora: 100, ultimoCuadro: 0 }), true, motivo);
+  }
+});
+
+test('tope: a 240 Hz con la cámara en movimiento no pasa de 60 cuadros por segundo', () => {
+  let ultimoCuadro = -Infinity;
+  let cuadros = 0;
+  for (let i = 0; i < 240; i++) {
+    const ahora = (i * 1000) / 240;
+    if (decidirCuadro({ ...reposo, cambio: true, ahora, ultimoCuadro })) { cuadros++; ultimoCuadro = ahora; }
+  }
+  assert.ok(cuadros <= FPS_MAXIMO && cuadros >= FPS_MAXIMO - 2, `${cuadros} cuadros`);
+});
+
+test('tope: a 60 Hz no pierde cuadros', () => {
+  let ultimoCuadro = -Infinity;
+  let cuadros = 0;
+  for (let i = 0; i < 60; i++) {
+    const ahora = (i * 1000) / 60;
+    if (decidirCuadro({ ...reposo, cambio: true, ahora, ultimoCuadro })) { cuadros++; ultimoCuadro = ahora; }
+  }
+  assert.equal(cuadros, 60);
+});
+
+test('firma de cuadro: detecta movimiento de cámara y cambio de tamaño del lienzo', () => {
+  const camara = { matrixWorld: { elements: Array(16).fill(0) }, projectionMatrix: { elements: Array(16).fill(1) } };
+  const lienzo = { width: 800, height: 600 };
+  const firma = crearFirmaCuadro();
+  assert.equal(firma.cambio(camara, lienzo), true);
+  firma.guardar(camara, lienzo);
+  assert.equal(firma.cambio(camara, lienzo), false);
+  camara.matrixWorld.elements[12] = 0.5;
+  assert.equal(firma.cambio(camara, lienzo), true);
+  firma.guardar(camara, lienzo);
+  assert.equal(firma.cambio(camara, { width: 801, height: 600 }), true);
+});
+
+test('firma de cuadro: el residuo de la amortiguación de la cámara no cuenta como cambio', () => {
+  const camara = { matrixWorld: { elements: Array(16).fill(0) }, projectionMatrix: { elements: Array(16).fill(1) } };
+  const lienzo = { width: 800, height: 600 };
+  const firma = crearFirmaCuadro();
+  firma.guardar(camara, lienzo);
+  camara.matrixWorld.elements[12] = TOLERANCIA_CAMARA / 10;
+  assert.equal(firma.cambio(camara, lienzo), false);
+  camara.matrixWorld.elements[12] = TOLERANCIA_CAMARA * 10;
+  assert.equal(firma.cambio(camara, lienzo), true);
 });

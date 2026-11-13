@@ -42,8 +42,9 @@ function crearSprites(tipo) {
  * @param escena   resultado de crearEscena (escena.js)
  * @param opciones.modoActual  () => modo del visor; sólo se arrastra en `explorar`
  * @param opciones.alMover     ({ id, part_id, punto }) => void
+ * @param opciones.alTocar     (id) => void · clic sin arrastre sobre un marcador
  */
-export function crearCapaHotspots(escena, { modoActual, alMover }) {
+export function crearCapaHotspots(escena, { modoActual, alMover, alTocar = () => {} }) {
   const grupo = new THREE.Group();
   grupo.name = 'semiolab-hotspots';
   escena.contexto.raiz.add(grupo);
@@ -86,7 +87,17 @@ export function crearCapaHotspots(escena, { modoActual, alMover }) {
       escalar(marcador, datos.id);
     }
     actualizarVisibilidad();
+    publicarConteo();
     escena.pedirCuadro();
+  }
+
+  /** Cantidad de marcadores por tipo en <body data-hotspots-*>: la usan las pruebas e2e. */
+  function publicarConteo() {
+    const cuerpo = globalThis.document?.body;
+    if (!cuerpo) return;
+    for (const tipo of ['sintoma', 'signo', 'foco']) {
+      cuerpo.dataset[`hotspots${tipo[0].toUpperCase()}${tipo.slice(1)}`] = String([...marcadores.values()].filter(m => m.datos.tipo === tipo).length);
+    }
   }
 
   /** Un marcador sobre una estructura oculta (capa apagada, corte) no se muestra. */
@@ -145,10 +156,12 @@ export function crearCapaHotspots(escena, { modoActual, alMover }) {
   window.addEventListener('pointerup', evento => {
     if (!arrastre) return;
     evento.stopImmediatePropagation();
-    const { id, destino } = arrastre;
+    const { id, destino, movido } = arrastre;
     arrastre = null;
     const marcador = marcadores.get(id);
-    if (!marcador || !destino) return;
+    if (!marcador) return;
+    if (!movido) { alTocar(id); return; }
+    if (!destino) return;
     marcador.datos = { ...marcador.datos, ...destino };
     alMover({ id, part_id: destino.part_id, punto: destino.punto });
   }, true);
