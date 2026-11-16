@@ -80,7 +80,8 @@ body.embed[data-micro="1"] #annotation-labels { display: block !important; }
 #semiolab-etiquetas .semiolab-grupo text {
   font: 600 11px system-ui, sans-serif; fill: #0f172a; text-anchor: middle; dominant-baseline: central;
 }
-/* Cámara en movimiento: textos y líneas al 25 %, sin redistribuir. */
+/* Cámara en movimiento: textos y líneas ocultos (las posiciones no se recalculan
+   durante el vuelo y apuntarían a lugares viejos); vuelven al reposar (150 ms). */
 #semiolab-etiquetas.moviendo .semiolab-etiqueta,
-#semiolab-etiquetas.moviendo > svg { opacity: 0.25 !important; transition: none; }
+#semiolab-etiquetas.moviendo > svg { opacity: 0 !important; transition: none; }
 #semiolab-etiquetas .semiolab-medidor { visibility: hidden; transform: translate(-9999px, 0); }
