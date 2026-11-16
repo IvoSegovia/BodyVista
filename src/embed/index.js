@@ -6,8 +6,9 @@ import { cajaDePartes, crearEscena, describirParte, sistemasDeParte } from './es
 import { crearCamara } from './camara.js';
 import { iniciarGuardrail } from './guardrail.js';
 import { crearCapaHotspots } from './hotspots.js';
+import { crearCapaEtiquetas } from './etiquetas.js';
 import { exponerCalibracion } from './perf.js';
-import { fijarEspanol } from './idioma.js';
+import { fijarEspanol, nombreEnEspanol } from './idioma.js';
 import { translateDOM, useDerivedLanguage } from '../i18n.js';
 
 const parametros = new URLSearchParams(location.search);
@@ -42,17 +43,24 @@ async function iniciarEmbed(ventana, { perf }) {
     cajaDePartes,
     alCambiarNavegacion: ({ mano }) => enviar({ type: 'navegacion', mano }),
   });
+  const etiquetas = crearCapaEtiquetas(escena, {
+    cajaDePartes,
+    nombreParte: nombreEnEspanol,
+    modoActual: modo.actual,
+    alCambiarModo: ({ modo: modoEtiquetas }) => enviar({ type: 'etiquetas', modo: modoEtiquetas }),
+  });
   const hotspots = crearCapaHotspots(escena, {
     modoActual: modo.actual,
     alMover: movido => enviar({ type: 'hotspotMoved', ...movido }),
     alTocar: id => enviar({ type: 'hotspotClicked', id }),
+    capa: etiquetas,
   });
   escena.pedirCuadro();
 
   if (perf) exponerCalibracion(ventana, visor, escena, { hotspots, describirParte, guardrail });
   if (!embebido) return; // Sin anfitrión no hay a quién avisar.
 
-  enviar = iniciarPuente(ventana, { visor, escena, guardrail, camara, hotspots, describirParte, modo });
+  enviar = iniciarPuente(ventana, { visor, escena, guardrail, camara, hotspots, etiquetas, describirParte, modo });
   enviar({ type: 'ready', conteos: visor.getCounts() });
 }
 

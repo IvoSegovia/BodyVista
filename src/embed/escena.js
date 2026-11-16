@@ -10,6 +10,8 @@ const SISTEMAS = new Set(['skeletal', 'muscular', 'cardiovascular', 'nervous', '
 const REGIONES = new Set(['head', 'neck', 'thorax', 'abdomen', 'pelvis', 'upper', 'lower']);
 const OPACIDAD_PICABLE = 0.5;
 const SEPARACION_SUPERFICIE = 0.004;
+/** Espera tras el último cambio de cámara para dar la vista por quieta (ms). */
+export const REPOSO_MS = 150;
 
 const partesPorId = new Map(catalogo.parts.map(parte => [parte.id, parte]));
 
@@ -87,7 +89,65 @@ export function crearEscena(visor) {
     contexto.camara = camara;
     const ahora = performance.now();
     for (const oyente of oyentesCuadro) oyente(ahora);
+    vigilarCamara();
   };
+
+  // ---- Movimiento de cámara (B12): «se mueve» al primer cuadro con otra cámara
+  // o tamaño de lienzo; «reposa» REPOSO_MS después del último cambio. Las capas
+  // de etiquetas y marcadores sólo trabajan al reposar: nada de DOM por cuadro.
+  const oyentesMovimiento = new Set();
+  const oyentesReposo = new Set();
+  const firma = new Float64Array(34);
+  const tamano = new THREE.Vector2();
+  let hayFirma = false;
+  let moviendo = false;
+  let temporizadorReposo = 0;
+
+  function vigilarCamara() {
+    const { camara, renderer } = contexto;
+    renderer.getSize(tamano);
+    const valores = [...camara.matrixWorld.elements, ...camara.projectionMatrix.elements, tamano.x, tamano.y];
+    let cambio = !hayFirma;
+    for (let i = 0; i < valores.length; i++) {
+      if (Math.abs(firma[i] - valores[i]) > 1e-7) { cambio = true; firma[i] = valores[i]; }
+    }
+    if (!cambio) return;
+    hayFirma = true;
+    if (!moviendo) {
+      moviendo = true;
+      for (const oyente of oyentesMovimiento) oyente();
+    }
+    clearTimeout(temporizadorReposo);
+    temporizadorReposo = setTimeout(() => {
+      moviendo = false;
+      for (const oyente of oyentesReposo) oyente();
+    }, REPOSO_MS);
+  }
+
+  const vector = new THREE.Vector3();
+  /** Tamaño del lienzo en píxeles CSS. */
+  function tamanoLienzo() {
+    if (!contexto.renderer) return { ancho: 0, alto: 0 };
+    contexto.renderer.getSize(tamano);
+    return { ancho: tamano.x, alto: tamano.y };
+  }
+
+  /** Punto de escena → píxeles CSS del lienzo; `dentro` es false fuera del cono de visión. */
+  function proyectar(punto) {
+    const camara = contexto.camara;
+    if (!camara) return { x: 0, y: 0, dentro: false };
+    const { ancho, alto } = tamanoLienzo();
+    vector.fromArray(punto).project(camara);
+    const dentro = vector.z >= -1 && vector.z <= 1 && Math.abs(vector.x) <= 1 && Math.abs(vector.y) <= 1;
+    return { x: ((vector.x + 1) / 2) * ancho, y: ((1 - vector.y) / 2) * alto, dentro };
+  }
+
+  /** Vector derecha de la cámara en coordenadas de escena. */
+  function derechaCamara() {
+    const camara = contexto.camara;
+    if (!camara) return [1, 0, 0];
+    return vector.setFromMatrixColumn(camara.matrixWorld, 0).normalize().toArray();
+  }
   raiz.add(centinela);
 
   let cuadroPedido = false;
@@ -117,16 +177,22 @@ export function crearEscena(visor) {
     return raycaster;
   }
 
-  /** Estructura visible bajo el puntero; atraviesa capas tenues (nivel 1) si detrás hay algo sólido. */
-  function tocarCuerpo(evento) {
-    const rayo = rayoDesde(evento);
-    if (!rayo) return null;
+  /** Mallas visibles → id de su estructura. */
+  function mallasVisibles() {
     const mallas = new Map();
     for (const parte of catalogo.parts) {
       const entrada = visor.getEntry(parte.id);
       if (!entrada || !visibleEnCadena(entrada.group)) continue;
       for (const malla of entrada.meshes ?? []) if (malla.visible) mallas.set(malla, parte.id);
     }
+    return mallas;
+  }
+
+  /** Estructura visible bajo el puntero; atraviesa capas tenues (nivel 1) si detrás hay algo sólido. */
+  function tocarCuerpo(evento) {
+    const rayo = rayoDesde(evento);
+    if (!rayo) return null;
+    const mallas = mallasVisibles();
     const impactos = rayo.intersectObjects([...mallas.keys()], false)
       .filter(impacto => !recortadoPorCorte(impacto.point, impacto.object, contexto.renderer));
     if (impactos.length === 0) return null;
@@ -136,12 +202,43 @@ export function crearEscena(visor) {
     return { part_id: mallas.get(elegido.object), punto: punto.toArray() };
   }
 
+  const rayoOclusion = new THREE.Raycaster();
+  const origen = new THREE.Vector3();
+  const destino = new THREE.Vector3();
+
+  /**
+   * Puntos tapados por una estructura sólida (opacidad ≥ 0,5) entre la cámara y
+   * ellos. Un solo recorrido de mallas para todos. Lo usan los marcadores para
+   * mostrar el «fantasma» sólo cuando hace falta (B12).
+   */
+  function tapados(puntos) {
+    const camara = contexto.camara;
+    if (!camara || puntos.length === 0) return puntos.map(() => false);
+    const solidas = [...mallasVisibles().keys()].filter(m => (materialDe(m)?.opacity ?? 1) >= OPACIDAD_PICABLE);
+    camara.getWorldPosition(origen);
+    return puntos.map(punto => {
+      destino.fromArray(punto);
+      const distancia = origen.distanceTo(destino);
+      rayoOclusion.set(origen, destino.clone().sub(origen).normalize());
+      rayoOclusion.far = Math.max(0, distancia - 0.01);
+      return rayoOclusion.intersectObjects(solidas, false)
+        .some(impacto => !recortadoPorCorte(impacto.point, impacto.object, contexto.renderer));
+    });
+  }
+
   return {
     contexto,
     pedirCuadro,
+    tapados,
     rayoDesde,
     tocarCuerpo,
     alDibujar(oyente) { oyentesCuadro.add(oyente); return () => oyentesCuadro.delete(oyente); },
+    alMoverCamara(oyente) { oyentesMovimiento.add(oyente); return () => oyentesMovimiento.delete(oyente); },
+    alReposar(oyente) { oyentesReposo.add(oyente); return () => oyentesReposo.delete(oyente); },
+    enMovimiento: () => moviendo,
+    tamanoLienzo,
+    proyectar,
+    derechaCamara,
     /**
      * Caja de lo visible ({ min, max }), con las cajas de BodyVista (entry.box),
      * igual que updateSection en main.js; null si no hay nada visible.

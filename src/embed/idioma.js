@@ -42,6 +42,18 @@ export function crearTraductor(tabla) {
   return traducir;
 }
 
+let traductorPartes = null;
+
+/** Nombre en español de una estructura (es-dict.js); si no figura, el que muestra BodyVista. */
+export function nombreEnEspanol(partId) {
+  const parte = catalogo.parts.find(p => p.id === partId);
+  if (!parte) return null;
+  if (PARTES[partId]) return PARTES[partId];
+  traductorPartes ??= crearTraductor(crearTablaEspanol());
+  const ingles = nombreIngles(parte) ?? parte.name;
+  return traductorPartes(ingles) ?? ingles;
+}
+
 /** Fija el español en el documento del visor (título incluido). */
 export function fijarEspanol(ventana, useDerivedLanguage) {
   const traducir = crearTraductor(crearTablaEspanol());

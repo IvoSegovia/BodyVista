@@ -5,6 +5,7 @@
 // emisor, canal, `type` y la forma mínima de cada carga; la vista completa la
 // valida BodyVista en restore() mediante validateView (src/state.js).
 import { DIRECCIONES, ENCUADRES } from './camara.js';
+import { MODOS_ETIQUETAS, TONOS } from './etiquetas.js';
 
 const CANAL = 'semiolab-puente';
 const VERSION = 1;
@@ -46,7 +47,34 @@ function esFlyTo(m) {
 }
 
 function esHotspot(h) {
-  return esObjeto(h) && esTexto(h.id) && TIPOS_HOTSPOT.has(h.tipo) && esTexto(h.part_id, 80) && esPunto(h.punto);
+  return esObjeto(h) && esTexto(h.id) && TIPOS_HOTSPOT.has(h.tipo) && esTexto(h.part_id, 80) && esPunto(h.punto)
+    && esOpcional(h.texto, v => esTexto(v, 80));
+}
+
+const COLUMNAS = new Set(['izquierda', 'derecha']);
+const esTono = v => Object.hasOwn(TONOS, v);
+
+/** Etiqueta de setEtiquetas: exactamente un ancla (part_id o punto). */
+function esEtiqueta(e) {
+  if (!esObjeto(e) || !esTexto(e.id) || !esTexto(e.texto, 80)) return false;
+  if ((e.part_id === undefined) === (e.punto === undefined)) return false;
+  return esOpcional(e.part_id, id => typeof id === 'string' && PART_ID.test(id))
+    && esOpcional(e.punto, esPunto)
+    && esOpcional(e.columna, c => COLUMNAS.has(c))
+    && esOpcional(e.tono, esTono)
+    && esOpcional(e.prioridad, v => Number.isInteger(v) && v >= 0 && v <= 3);
+}
+
+function esEnlace(e) {
+  return esObjeto(e) && esPunto(e.de) && esPunto(e.a) && esOpcional(e.tono, esTono);
+}
+
+/** setEtiquetas: todos los campos opcionales; el que viene reemplaza al vigente. */
+function esSetEtiquetas(m) {
+  return esOpcional(m.modo, v => MODOS_ETIQUETAS.includes(v))
+    && esOpcional(m.margenes, g => esObjeto(g) && enRango(g.arriba, 0, 200) && enRango(g.abajo, 0, 200) && esOpcional(g.izquierda, v => enRango(v, 0, 200)))
+    && esOpcional(m.etiquetas, l => Array.isArray(l) && l.length <= 24 && l.every(esEtiqueta) && new Set(l.map(e => e.id)).size === l.length)
+    && esOpcional(m.enlaces, l => Array.isArray(l) && l.length <= 10 && l.every(esEnlace));
 }
 
 // BodyVista marca <body data-ready="true"> al terminar la carga inicial (main.js).
@@ -65,17 +93,27 @@ export function cuandoEsteCargado(documento) {
 
 /**
  * @param ventana   window del iframe
- * @param piezas    { visor, escena, guardrail, camara, hotspots, describirParte, modo: { actual, cambiar } }
+ * @param piezas    { visor, escena, guardrail, camara, hotspots, etiquetas, describirParte, modo: { actual, cambiar } }
  * @returns enviar(mensaje)
  */
-export function iniciarPuente(ventana, { visor, escena, guardrail, camara, hotspots, describirParte, modo }) {
+export function iniciarPuente(ventana, { visor, escena, guardrail, camara, hotspots, etiquetas, describirParte, modo }) {
   const padre = ventana.parent;
   const origen = ventana.location.origin;
   const enviar = mensaje => padre.postMessage({ canal: CANAL, version: VERSION, ...mensaje }, origen);
 
+  /** Escena microscópica: la capa de etiquetas se oculta y vuelven los rótulos nativos del mecanismo. */
+  function marcarMicro(activa) {
+    ventana.document.body.dataset.micro = activa ? '1' : '0';
+    etiquetas.marcarMicro(activa);
+  }
+
   async function emitirEstado() {
     await visor.whenIdle();
-    enviar({ type: 'state', vista: visor.getState() });
+    const vista = visor.getState();
+    enviar({ type: 'state', vista });
+    // La vista cambió (capas, corte, partes) aunque la cámara siga quieta.
+    hotspots.refrescar();
+    etiquetas.refrescar();
   }
 
   // Los cambios de vista son asíncronos: se aplican en orden de llegada, cada
@@ -99,6 +137,10 @@ export function iniciarPuente(ventana, { visor, escena, guardrail, camara, hotsp
         } else {
           await guardrail.restore(m.vista);
         }
+        await visor.whenIdle();
+        const vista = visor.getState();
+        marcarMicro(Boolean(vista.micro));
+        etiquetas.alRestaurarVista(vista);
         await emitirEstado();
       });
       return true;
@@ -145,13 +187,18 @@ export function iniciarPuente(ventana, { visor, escena, guardrail, camara, hotsp
     showMicro(m) {
       if (m.key !== null && !ESCENAS_MICRO.has(m.key)) return false;
       enCola(() => Promise.resolve(m.key === null ? visor.restore({ ...visor.getState(), micro: null }) : visor.showMicro(m.key))
-        .then(() => { guardrail.marcarMicro(m.key !== null); return emitirEstado(); }));
+        .then(() => { guardrail.marcarMicro(m.key !== null); marcarMicro(m.key !== null); return emitirEstado(); }));
       return true;
     },
     setHotspots(m) {
       if (!Array.isArray(m.hotspots) || m.hotspots.length > 200 || !m.hotspots.every(esHotspot)) return false;
       if (m.resaltado !== null && !esTexto(m.resaltado)) return false;
       hotspots.setHotspots(m.hotspots, m.resaltado);
+      return true;
+    },
+    setEtiquetas(m) {
+      if (!esSetEtiquetas(m)) return false;
+      etiquetas.setEtiquetas(m);
       return true;
     },
     setMode(m) {
@@ -190,7 +237,7 @@ export function iniciarPuente(ventana, { visor, escena, guardrail, camara, hotsp
     const inicio = presion;
     presion = null;
     if (!inicio || Math.hypot(evento.clientX - inicio.x, evento.clientY - inicio.y) > CLIC_MAX_PX) return;
-    if (performance.now() - inicio.t > CLIC_MAX_MS || hotspots.tocaMarcador(evento)) return;
+    if (performance.now() - inicio.t > CLIC_MAX_MS || hotspots.tocaMarcador(evento) || etiquetas.tocaPin(evento)) return;
     const tocado = escena.tocarCuerpo(evento);
     if (!tocado) return;
     const parte = describirParte(tocado.part_id);

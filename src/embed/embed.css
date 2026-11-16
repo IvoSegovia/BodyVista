@@ -45,3 +45,42 @@ body.embed[data-mano="1"] canvas { cursor: grab !important; }
 body.embed[data-mano="1"][data-arrastrando="1"] canvas { cursor: grabbing !important; }
 body.embed:not([data-modo]):not([data-mano="1"]) canvas,
 body.embed[data-modo="explorar"]:not([data-mano="1"]) canvas { cursor: default !important; }
+
+/* Etiquetas (B12): las nativas se reemplazan por la capa propia de etiquetas.js. */
+body.embed #annotation-labels { display: none !important; }
+/* Escena microscópica: sus rótulos los dibuja BodyVista; la capa propia se oculta. */
+body.embed[data-micro="1"] #annotation-labels { display: block !important; }
+/* Fondos opacos o translúcidos simples: nada de backdrop-filter sobre el lienzo (B11). */
+#semiolab-etiquetas {
+  position: fixed; left: 0; top: 0; width: 100%; height: 100%;
+  pointer-events: none; overflow: hidden; z-index: 5;
+  font: 12px/1.3 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+#semiolab-etiquetas > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+#semiolab-etiquetas .semiolab-etiqueta {
+  position: absolute; left: 0; top: 0; box-sizing: border-box;
+  padding: 2px 6px; color: #0f172a; background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #cbd5e1; border-radius: 3px; --tono: #334155;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+  overflow: hidden; overflow-wrap: anywhere; white-space: normal;
+  transition: opacity 300ms ease;
+}
+#semiolab-etiquetas .semiolab-etiqueta[data-lado="izquierda"] { border-right: 3px solid var(--tono); }
+#semiolab-etiquetas .semiolab-etiqueta[data-lado="derecha"] { border-left: 3px solid var(--tono); }
+#semiolab-etiquetas .semiolab-etiqueta[data-tono="sintoma"] { --tono: #f59e0b; }
+#semiolab-etiquetas .semiolab-etiqueta[data-tono="signo"] { --tono: #06b6d4; }
+#semiolab-etiquetas .semiolab-etiqueta[data-tono="foco"] { --tono: #8b5cf6; }
+#semiolab-etiquetas .semiolab-etiqueta[data-tono="real"] { --tono: #dc2626; }
+#semiolab-etiquetas .semiolab-linea { fill: none; stroke-width: 1; opacity: 0.7; transition: opacity 300ms ease; }
+#semiolab-etiquetas .semiolab-ancla.pin { stroke: #ffffff; stroke-width: 1.5; }
+#semiolab-etiquetas .semiolab-enlace { stroke-width: 1; stroke-dasharray: 4 3; opacity: 0.7; }
+#semiolab-etiquetas .semiolab-hilo { stroke: #334155; stroke-width: 1; opacity: 0.7; }
+#semiolab-etiquetas .semiolab-abanico { stroke: #ffffff; stroke-width: 2; }
+#semiolab-etiquetas .semiolab-grupo circle { fill: #ffffff; stroke: #334155; stroke-width: 1.5; }
+#semiolab-etiquetas .semiolab-grupo text {
+  font: 600 11px system-ui, sans-serif; fill: #0f172a; text-anchor: middle; dominant-baseline: central;
+}
+/* Cámara en movimiento: textos y líneas al 25 %, sin redistribuir. */
+#semiolab-etiquetas.moviendo .semiolab-etiqueta,
+#semiolab-etiquetas.moviendo > svg { opacity: 0.25 !important; transition: none; }
+#semiolab-etiquetas .semiolab-medidor { visibility: hidden; transform: translate(-9999px, 0); }
