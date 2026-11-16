@@ -7,6 +7,7 @@
 import { DIRECCIONES, ENCUADRES } from './camara.js';
 import { MODOS_ETIQUETAS, TONOS } from './etiquetas.js';
 import { nombreEnEspanol } from './idioma.js';
+import { esSetPuntos } from './puntos-cercania.js';
 
 const CANAL = 'semiolab-puente';
 const VERSION = 1;
@@ -100,10 +101,10 @@ export function cuandoEsteCargado(documento) {
 
 /**
  * @param ventana   window del iframe
- * @param piezas    { visor, escena, guardrail, camara, hotspots, etiquetas, describirParte, modo: { actual, cambiar } }
+ * @param piezas    { visor, escena, guardrail, camara, hotspots, etiquetas, puntos, describirParte, modo: { actual, cambiar } }
  * @returns enviar(mensaje)
  */
-export function iniciarPuente(ventana, { visor, escena, guardrail, camara, hotspots, etiquetas, describirParte, modo }) {
+export function iniciarPuente(ventana, { visor, escena, guardrail, camara, hotspots, etiquetas, puntos, describirParte, modo }) {
   const padre = ventana.parent;
   const origen = ventana.location.origin;
   const enviar = mensaje => padre.postMessage({ canal: CANAL, version: VERSION, ...mensaje }, origen);
@@ -208,9 +209,15 @@ export function iniciarPuente(ventana, { visor, escena, guardrail, camara, hotsp
       etiquetas.setEtiquetas(m);
       return true;
     },
+    setPuntos(m) {
+      if (!esSetPuntos(m)) return false;
+      puntos.setPuntos(m.puntos, m.mostrar);
+      return true;
+    },
     setMode(m) {
       if (!MODOS.has(m.modo)) return false;
       modo.cambiar(m.modo);
+      puntos.alCambiarModo();
       return true;
     },
     setQuality(m) {
@@ -248,14 +255,18 @@ export function iniciarPuente(ventana, { visor, escena, guardrail, camara, hotsp
     const tocado = escena.tocarCuerpo(evento);
     if (!tocado) return;
     const parte = describirParte(tocado.part_id);
+    const modoActual = modo.actual();
     enviar({
       type: 'pick',
-      modo: modo.actual(),
+      modo: modoActual,
       part_id: tocado.part_id,
       sistema: parte?.sistemas[0] ?? null,
       regiones: parte?.regiones ?? [],
       punto: tocado.punto,
       ...nombreDeParte(tocado.part_id),
+      // B14: punto semiológico más cercano (sólo al examinar) y dónde abrir el panel.
+      punto_id: modoActual === 'examinar' ? puntos.puntoEn(tocado) : null,
+      pantalla: [evento.clientX, evento.clientY],
     });
   });
 

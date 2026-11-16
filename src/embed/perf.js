@@ -4,7 +4,7 @@
 // cuadro por frame durante `ms` y devuelve FPS promedio, triángulos y llamadas.
 import * as THREE from '../vendor/three.js';
 
-export function exponerCalibracion(ventana, visor, escena, { hotspots, describirParte, guardrail }) {
+export function exponerCalibracion(ventana, visor, escena, { hotspots, puntos, describirParte, guardrail }) {
   ventana.SemiolabPerf = {
     async medir(vista, ms = 5000) {
       await visor.restore(vista);
@@ -37,7 +37,10 @@ export function exponerCalibracion(ventana, visor, escena, { hotspots, describir
     estado: () => visor.getState(),
     /** Cuadros dibujados por motivo (cambio de cámara, pedido, interacción, animación, seguridad). */
     motivosCuadro: () => guardrail.leerMotivosCuadro(),
-    /** Herramienta de autor (scripts/anclas-generar.mjs): qué estructura y punto de piel hay bajo (x, y) del lienzo. */
+    /**
+     * Herramienta de autor (scripts/anclas-generar.mjs): qué estructura, punto de piel y
+     * normal de la cara (B14) hay bajo (x, y) del lienzo.
+     */
     tocar(clientX, clientY) {
       const tocado = escena.tocarCuerpo({ clientX, clientY });
       return tocado ? { ...tocado, regiones: describirParte(tocado.part_id)?.regiones ?? [] } : null;
@@ -46,6 +49,15 @@ export function exponerCalibracion(ventana, visor, escena, { hotspots, describir
     mostrarHotspots(lista) {
       hotspots.setHotspots(lista, null);
       escena.pedirCuadro();
+    },
+    /** Dibuja puntos semiológicos sin pasar por el puente (evidencia de anclas, B14). */
+    mostrarPuntos(lista, mostrar = 'todos') {
+      puntos.setPuntos(lista, mostrar);
+      escena.pedirCuadro();
+    },
+    /** Punto de escena → píxeles del lienzo con la cámara actual (semillas de anclas, B14). */
+    proyectar(punto) {
+      return escena.proyectar(punto);
     },
   };
 }

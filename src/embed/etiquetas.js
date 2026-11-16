@@ -15,6 +15,7 @@ const CERCANIA_PIN_PX = 12;
 const MAX_SELECCIONADAS = 8;
 const UMBRAL_DOM_PX = 0.5;
 const SVG = 'http://www.w3.org/2000/svg';
+const ID_CURSOR = 'cursor';
 
 export const TONOS = {
   neutro: '#334155',
@@ -133,6 +134,22 @@ export function crearCapaEtiquetas(escena, { cajaDePartes, nombreParte, alCambia
     actualizar();
   }
 
+  /**
+   * B14: rótulo bajo el cursor ({ texto, punto } o null): punto semiológico en
+   * modo examinar, estructura en explorar y foco. Prioridad 3, tono neutro,
+   * abierto mientras el cursor esté encima; no cuenta como etiqueta de la app.
+   */
+  function setCursor(datos) {
+    if (!datos) {
+      if (!entradas.has(ID_CURSOR)) return;
+      quitarOrigen('cursor');
+    } else {
+      poner({ id: ID_CURSOR, texto: datos.texto, origen: 'cursor', prioridad: 3, tono: 'neutro', ancla: { punto: datos.punto } }, false);
+    }
+    documento.body.dataset.etiquetaCursor = datos?.texto ?? '';
+    actualizar();
+  }
+
   function setGrupos(lista) {
     grupos = lista;
     idsAgrupados = new Set(lista.flatMap(g => g.ids.map(id => `hotspot:${id}`)));
@@ -162,7 +179,9 @@ export function crearCapaEtiquetas(escena, { cajaDePartes, nombreParte, alCambia
   }
 
   function abierta(e, t) {
-    if (micro || modo === 'ocultas') return false;
+    if (micro) return false;
+    if (e.origen === 'cursor') return true;
+    if (modo === 'ocultas') return false;
     if (modo === 'siempre') return true;
     if (e.origen === 'hotspot') return e.id === resaltado || (e.cerca && !idsAgrupados.has(e.id));
     return e.fija || e.cerca || t < e.abiertaHasta || t < e.cercaHasta;
@@ -433,8 +452,9 @@ export function crearCapaEtiquetas(escena, { cajaDePartes, nombreParte, alCambia
   function publicarConteo() {
     const cuerpo = documento.body;
     cuerpo.dataset.etiquetasModo = modo;
-    cuerpo.dataset.etiquetasAbiertas = String(mostradas.size);
-    cuerpo.dataset.etiquetasPins = String([...entradas.values()].filter(e => e.origen !== 'hotspot' && proyectadas.has(e.id) && !mostradas.has(e.id)).length);
+    // El rótulo del cursor (B14) no cuenta: es la herramienta, no una etiqueta.
+    cuerpo.dataset.etiquetasAbiertas = String([...mostradas].filter(id => id !== ID_CURSOR).length);
+    cuerpo.dataset.etiquetasPins = String([...entradas.values()].filter(e => e.origen !== 'hotspot' && e.origen !== 'cursor' && proyectadas.has(e.id) && !mostradas.has(e.id)).length);
   }
 
   // ------------------------------------------------------------------ cámara
@@ -464,6 +484,7 @@ export function crearCapaEtiquetas(escena, { cajaDePartes, nombreParte, alCambia
     let mejor = null;
     let distanciaMejor = CERCANIA_PIN_PX;
     for (const [id, a] of proyectadas) {
+      if (id === ID_CURSOR) continue;
       const d = Math.hypot(a.ax - p.x, a.ay - p.y);
       if (d < distanciaMejor) { mejor = entradas.get(id) ?? null; distanciaMejor = d; }
     }
@@ -535,6 +556,7 @@ export function crearCapaEtiquetas(escena, { cajaDePartes, nombreParte, alCambia
     setEtiquetas,
     setMarcadores,
     setGrupos,
+    setCursor,
     alRestaurarVista,
     marcarMicro,
     /** La vista cambió sin mover la cámara (capas, corte): anclas visibles y proyecciones. */

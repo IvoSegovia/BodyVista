@@ -188,7 +188,10 @@ export function crearEscena(visor) {
     return mallas;
   }
 
-  /** Estructura visible bajo el puntero; atraviesa capas tenues (nivel 1) si detrás hay algo sólido. */
+  /**
+   * Estructura visible bajo el puntero; atraviesa capas tenues (nivel 1) si detrás hay algo sólido.
+   * Devuelve { part_id, punto, normal }: punto separado de la piel y normal unitaria de la cara.
+   */
   function tocarCuerpo(evento) {
     const rayo = rayoDesde(evento);
     if (!rayo) return null;
@@ -199,7 +202,8 @@ export function crearEscena(visor) {
     const elegido = impactos.find(i => (materialDe(i.object)?.opacity ?? 1) >= OPACIDAD_PICABLE) ?? impactos[0];
     const normal = elegido.face?.normal.clone().transformDirection(elegido.object.matrixWorld) ?? new THREE.Vector3();
     const punto = elegido.point.clone().addScaledVector(normal, SEPARACION_SUPERFICIE);
-    return { part_id: mallas.get(elegido.object), punto: punto.toArray() };
+    // B14: la normal de la cara tocada orienta los aros de los puntos semiológicos.
+    return { part_id: mallas.get(elegido.object), punto: punto.toArray(), normal: normal.toArray() };
   }
 
   const rayoOclusion = new THREE.Raycaster();

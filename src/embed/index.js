@@ -7,6 +7,7 @@ import { crearCamara } from './camara.js';
 import { iniciarGuardrail } from './guardrail.js';
 import { crearCapaHotspots } from './hotspots.js';
 import { crearCapaEtiquetas } from './etiquetas.js';
+import { crearCapaPuntos } from './puntos.js';
 import { exponerCalibracion } from './perf.js';
 import { fijarEspanol, nombreEnEspanol } from './idioma.js';
 import { translateDOM, useDerivedLanguage } from '../i18n.js';
@@ -55,12 +56,19 @@ async function iniciarEmbed(ventana, { perf }) {
     alTocar: id => enviar({ type: 'hotspotClicked', id }),
     capa: etiquetas,
   });
+  const puntos = crearCapaPuntos(escena, {
+    modoActual: modo.actual,
+    capa: etiquetas,
+    nombreParte: nombreEnEspanol,
+    sistemasDeParte,
+    ventana,
+  });
   escena.pedirCuadro();
 
-  if (perf) exponerCalibracion(ventana, visor, escena, { hotspots, describirParte, guardrail });
+  if (perf) exponerCalibracion(ventana, visor, escena, { hotspots, puntos, describirParte, guardrail });
   if (!embebido) return; // Sin anfitrión no hay a quién avisar.
 
-  enviar = iniciarPuente(ventana, { visor, escena, guardrail, camara, hotspots, etiquetas, describirParte, modo });
+  enviar = iniciarPuente(ventana, { visor, escena, guardrail, camara, hotspots, etiquetas, puntos, describirParte, modo });
   enviar({ type: 'ready', conteos: visor.getCounts() });
 }
 
