@@ -34,9 +34,12 @@ body.embed #workspace {
   grid-template-columns: none !important;
 }
 body.embed #canvas-area { height: 100%; }
-/* Modos de marcado y examen: el cursor indica que un clic ubica algo. */
-body.embed[data-modo^="marcar"] canvas,
-body.embed[data-modo="examinar"] canvas { cursor: crosshair; }
+/* Modos de marcado y examen: el cursor indica que un clic ubica algo.
+   El cursor nativo se escribe en línea: hace falta !important (B11). La mano, más abajo, gana por orden. */
+body.embed[data-modo="marcar:sintoma"] canvas,
+body.embed[data-modo="marcar:signo"] canvas,
+body.embed[data-modo="marcar:foco"] canvas,
+body.embed[data-modo="examinar"] canvas { cursor: crosshair !important; }
 /* Cámara clínica (camara.js). El cursor nativo se escribe en línea: hace falta !important. */
 body.embed[data-mano="1"] canvas { cursor: grab !important; }
 body.embed[data-mano="1"][data-arrastrando="1"] canvas { cursor: grabbing !important; }
