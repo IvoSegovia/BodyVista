@@ -6,6 +6,7 @@
 // valida BodyVista en restore() mediante validateView (src/state.js).
 import { DIRECCIONES, ENCUADRES } from './camara.js';
 import { MODOS_ETIQUETAS, TONOS } from './etiquetas.js';
+import { nombreEnEspanol } from './idioma.js';
 
 const CANAL = 'semiolab-puente';
 const VERSION = 1;
@@ -33,6 +34,12 @@ const enRango = (v, min, max) => esNumero(v) && v >= min && v <= max;
 const esOpcional = (v, prueba) => v === undefined || prueba(v);
 
 /** flyTo: exactamente una fuente entre part_ids | punto | region | (camera y target juntos). */
+/** Nombre en español de la estructura, para que la app distinga los marcadores sin vínculo (B13b). */
+export function nombreDeParte(partId) {
+  const nombre = nombreEnEspanol(partId)?.trim().slice(0, 80);
+  return nombre ? { nombre } : {};
+}
+
 function esFlyTo(m) {
   const fuentes = [m.part_ids, m.punto, m.region, m.camera ?? m.target].filter(v => v !== undefined).length;
   if (fuentes !== 1 || (m.camera === undefined) !== (m.target === undefined)) return false;
@@ -248,6 +255,7 @@ export function iniciarPuente(ventana, { visor, escena, guardrail, camara, hotsp
       sistema: parte?.sistemas[0] ?? null,
       regiones: parte?.regiones ?? [],
       punto: tocado.punto,
+      ...nombreDeParte(tocado.part_id),
     });
   });
 

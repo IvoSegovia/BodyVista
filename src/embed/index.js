@@ -1,7 +1,7 @@
 // SemioLab 3D · punto de entrada del modo embed. Se carga después de main.js
 // (index.html), por lo que window.BodyVista ya está definido.
 import './embed.css';
-import { cuandoEsteCargado, iniciarPuente } from './bridge.js';
+import { cuandoEsteCargado, iniciarPuente, nombreDeParte } from './bridge.js';
 import { cajaDePartes, crearEscena, describirParte, sistemasDeParte } from './escena.js';
 import { crearCamara } from './camara.js';
 import { iniciarGuardrail } from './guardrail.js';
@@ -51,7 +51,7 @@ async function iniciarEmbed(ventana, { perf }) {
   });
   const hotspots = crearCapaHotspots(escena, {
     modoActual: modo.actual,
-    alMover: movido => enviar({ type: 'hotspotMoved', ...movido }),
+    alMover: movido => enviar({ type: 'hotspotMoved', ...movido, ...nombreDeParte(movido.part_id) }),
     alTocar: id => enviar({ type: 'hotspotClicked', id }),
     capa: etiquetas,
   });
