@@ -2,7 +2,8 @@
 // (index.html), por lo que window.BodyVista ya está definido.
 import './embed.css';
 import { cuandoEsteCargado, iniciarPuente } from './bridge.js';
-import { crearEscena, describirParte, sistemasDeParte } from './escena.js';
+import { cajaDePartes, crearEscena, describirParte, sistemasDeParte } from './escena.js';
+import { crearCamara } from './camara.js';
 import { iniciarGuardrail } from './guardrail.js';
 import { crearCapaHotspots } from './hotspots.js';
 import { exponerCalibracion } from './perf.js';
@@ -36,6 +37,11 @@ async function iniciarEmbed(ventana, { perf }) {
     alAtenuar: ({ atenuadas, capas }) => enviar({ type: 'guardrail', atenuadas, capas }),
     alMedir: medida => enviar({ type: 'stats', ...medida }),
   });
+  const camara = crearCamara(visor, escena, guardrail, {
+    modoActual: modo.actual,
+    cajaDePartes,
+    alCambiarNavegacion: ({ mano }) => enviar({ type: 'navegacion', mano }),
+  });
   const hotspots = crearCapaHotspots(escena, {
     modoActual: modo.actual,
     alMover: movido => enviar({ type: 'hotspotMoved', ...movido }),
@@ -46,7 +52,7 @@ async function iniciarEmbed(ventana, { perf }) {
   if (perf) exponerCalibracion(ventana, visor, escena, { hotspots, describirParte, guardrail });
   if (!embebido) return; // Sin anfitrión no hay a quién avisar.
 
-  enviar = iniciarPuente(ventana, { visor, escena, guardrail, hotspots, describirParte, modo });
+  enviar = iniciarPuente(ventana, { visor, escena, guardrail, camara, hotspots, describirParte, modo });
   enviar({ type: 'ready', conteos: visor.getCounts() });
 }
 

@@ -26,6 +26,20 @@ export function sistemasDeParte(partId) {
   return describirParte(partId)?.sistemas ?? [];
 }
 
+/** Unión de los `bounds` del catálogo de esas partes ({ min, max }); null si ninguna existe. */
+export function cajaDePartes(ids) {
+  let caja = null;
+  for (const id of ids) {
+    const bounds = partesPorId.get(id)?.bounds;
+    if (!bounds) continue;
+    const [min, max] = bounds;
+    caja = caja === null
+      ? { min: [...min], max: [...max] }
+      : { min: caja.min.map((v, i) => Math.min(v, min[i])), max: caja.max.map((v, i) => Math.max(v, max[i])) };
+  }
+  return caja;
+}
+
 function buscarEscena(visor) {
   for (const parte of catalogo.parts) {
     let nodo = visor.getEntry(parte.id)?.group;
@@ -128,6 +142,18 @@ export function crearEscena(visor) {
     rayoDesde,
     tocarCuerpo,
     alDibujar(oyente) { oyentesCuadro.add(oyente); return () => oyentesCuadro.delete(oyente); },
+    /**
+     * Caja de lo visible ({ min, max }), con las cajas de BodyVista (entry.box),
+     * igual que updateSection en main.js; null si no hay nada visible.
+     */
+    cajaVisible() {
+      const caja = new THREE.Box3();
+      for (const parte of catalogo.parts) {
+        const entrada = visor.getEntry(parte.id);
+        if (entrada?.box && entrada.group.visible) caja.union(entrada.box);
+      }
+      return caja.isEmpty() ? null : { min: caja.min.toArray(), max: caja.max.toArray() };
+    },
     estaVisible(partId) {
       const entrada = visor.getEntry(partId);
       return Boolean(entrada && visibleEnCadena(entrada.group));

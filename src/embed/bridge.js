@@ -4,6 +4,7 @@
 // importa el schema (el fork queda aislado del monorepo): verifica origen,
 // emisor, canal, `type` y la forma mínima de cada carga; la vista completa la
 // valida BodyVista en restore() mediante validateView (src/state.js).
+import { DIRECCIONES, ENCUADRES } from './camara.js';
 
 const CANAL = 'semiolab-puente';
 const VERSION = 1;
@@ -13,6 +14,9 @@ const ESCENAS_MICRO = new Set(['alveoli', 'nephron', 'sarcomere', 'synapse', 'vi
 const EJES = new Set(['x', 'y', 'z']);
 const CLIC_MAX_PX = 5;
 const CLIC_MAX_MS = 500;
+const PART_ID = /^(z_[0-9a-f]{16}|bp2_[A-Za-z0-9_]+)$/;
+const REGIONES_ENCUADRE = new Set(Object.keys(ENCUADRES));
+const NOMBRES_DIRECCION = new Set([...Object.keys(DIRECCIONES), 'actual']);
 
 const esObjeto = v => typeof v === 'object' && v !== null && !Array.isArray(v);
 const esNumero = v => typeof v === 'number' && Number.isFinite(v);
@@ -22,6 +26,23 @@ const esTexto = (v, max = 64) => typeof v === 'string' && v.length > 0 && v.leng
 
 function esMensajeDelPuente(datos) {
   return esObjeto(datos) && datos.canal === CANAL && datos.version === VERSION && typeof datos.type === 'string';
+}
+
+const enRango = (v, min, max) => esNumero(v) && v >= min && v <= max;
+const esOpcional = (v, prueba) => v === undefined || prueba(v);
+
+/** flyTo: exactamente una fuente entre part_ids | punto | region | (camera y target juntos). */
+function esFlyTo(m) {
+  const fuentes = [m.part_ids, m.punto, m.region, m.camera ?? m.target].filter(v => v !== undefined).length;
+  if (fuentes !== 1 || (m.camera === undefined) !== (m.target === undefined)) return false;
+  return esOpcional(m.part_ids, ids => Array.isArray(ids) && ids.length >= 1 && ids.length <= 50 && ids.every(id => typeof id === 'string' && PART_ID.test(id)))
+    && esOpcional(m.punto, esPunto)
+    && esOpcional(m.region, r => REGIONES_ENCUADRE.has(r))
+    && esOpcional(m.camera, esPunto)
+    && esOpcional(m.target, esPunto)
+    && esOpcional(m.direccion, d => NOMBRES_DIRECCION.has(d))
+    && esOpcional(m.margen, v => enRango(v, 1, 3))
+    && esOpcional(m.ms, v => enRango(v, 0, 2000));
 }
 
 function esHotspot(h) {
@@ -44,10 +65,10 @@ export function cuandoEsteCargado(documento) {
 
 /**
  * @param ventana   window del iframe
- * @param piezas    { visor, escena, guardrail, hotspots, describirParte, modo: { actual, cambiar } }
+ * @param piezas    { visor, escena, guardrail, camara, hotspots, describirParte, modo: { actual, cambiar } }
  * @returns enviar(mensaje)
  */
-export function iniciarPuente(ventana, { visor, escena, guardrail, hotspots, describirParte, modo }) {
+export function iniciarPuente(ventana, { visor, escena, guardrail, camara, hotspots, describirParte, modo }) {
   const padre = ventana.parent;
   const origen = ventana.location.origin;
   const enviar = mensaje => padre.postMessage({ canal: CANAL, version: VERSION, ...mensaje }, origen);
@@ -68,8 +89,18 @@ export function iniciarPuente(ventana, { visor, escena, guardrail, hotspots, des
   // Cada manejador valida su carga y devuelve false si no cumple el contrato.
   const manejadores = {
     restore(m) {
-      if (!esObjeto(m.vista) || !esObjeto(m.vista.layers)) return false;
-      enCola(() => guardrail.restore(m.vista).then(emitirEstado));
+      if (!esObjeto(m.vista) || !esObjeto(m.vista.layers) || !esOpcional(m.animar, v => typeof v === 'boolean')) return false;
+      enCola(async () => {
+        const actual = visor.getState();
+        if (m.animar && (m.vista.projection ?? 'perspective') === actual.projection) {
+          // Capas y partes de la vista con la cámara actual; después, el vuelo a la de la vista.
+          await guardrail.restore({ ...m.vista, camera: actual.camera, target: actual.target, up: actual.up, projection: actual.projection });
+          await camara.volar({ camera: m.vista.camera, target: m.vista.target });
+        } else {
+          await guardrail.restore(m.vista);
+        }
+        await emitirEstado();
+      });
       return true;
     },
     setLayers(m) {
@@ -77,11 +108,38 @@ export function iniciarPuente(ventana, { visor, escena, guardrail, hotspots, des
       enCola(() => guardrail.setLayers(m.capas).then(emitirEstado));
       return true;
     },
+    // Sin openSection (main.js), que pisaba capas, isolate y selected y salteaba
+    // el guardrail: el corte se aplica sobre la vista vigente.
     showSection(m) {
       if (!EJES.has(m.axis) || !esNumero(m.section) || m.section < 0 || m.section > 100) return false;
-      enCola(() => Promise.resolve(visor.showSection(m.axis))
-        .then(() => visor.restore({ ...visor.getState(), axis: m.axis, section: m.section }))
-        .then(() => { escena.pedirCuadro(); return emitirEstado(); }));
+      enCola(async () => {
+        const actual = visor.getState();
+        if (actual.micro) return; // el corte no aplica a la escena microscópica
+        await guardrail.restore({ ...actual, axis: m.axis, section: m.section });
+        if (m.section > 0) await camara.mirarCorte(m.axis, m.section);
+        escena.pedirCuadro();
+        await emitirEstado();
+      });
+      return true;
+    },
+    flyTo(m) {
+      if (!esFlyTo(m)) return false;
+      enCola(() => camara.volarA(m).then(emitirEstado));
+      return true;
+    },
+    orientar(m) {
+      if (!NOMBRES_DIRECCION.has(m.direccion)) return false;
+      enCola(() => camara.orientar(m.direccion).then(emitirEstado));
+      return true;
+    },
+    zoom(m) {
+      if (!enRango(m.factor, 0.25, 4)) return false;
+      enCola(() => camara.zoom(m.factor).then(emitirEstado));
+      return true;
+    },
+    setNavegacion(m) {
+      if (typeof m.mano !== 'boolean') return false;
+      camara.fijarMano(m.mano);
       return true;
     },
     showMicro(m) {

@@ -37,3 +37,8 @@ body.embed #canvas-area { height: 100%; }
 /* Modos de marcado y examen: el cursor indica que un clic ubica algo. */
 body.embed[data-modo^="marcar"] canvas,
 body.embed[data-modo="examinar"] canvas { cursor: crosshair; }
+/* Cámara clínica (camara.js). El cursor nativo se escribe en línea: hace falta !important. */
+body.embed[data-mano="1"] canvas { cursor: grab !important; }
+body.embed[data-mano="1"][data-arrastrando="1"] canvas { cursor: grabbing !important; }
+body.embed:not([data-modo]):not([data-mano="1"]) canvas,
+body.embed[data-modo="explorar"]:not([data-mano="1"]) canvas { cursor: default !important; }

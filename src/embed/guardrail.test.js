@@ -145,3 +145,12 @@ test('firma de cuadro: el residuo de la amortiguación de la cámara no cuenta c
   camara.matrixWorld.elements[12] = TOLERANCIA_CAMARA * 10;
   assert.equal(firma.cambio(camara, lienzo), true);
 });
+
+test('fpsDeDibujo: ritmo mientras se dibuja; el reposo no lo baja', () => {
+  const monitor = new MonitorFps();
+  assert.equal(monitor.fpsDeDibujo(), null);
+  // Ráfaga a 50 cuadros/s, después reposo con el cuadro de seguridad (1 por segundo).
+  for (let t = 0; t <= 400; t += 20) monitor.registrar(t);
+  monitor.registrar(1400);
+  assert.equal(monitor.fpsDeDibujo(), 50);
+});

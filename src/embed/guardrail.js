@@ -127,6 +127,22 @@ export class MonitorFps {
     return this.cuadros.filter(t => t > ahora - ventanaMs).length * (1000 / ventanaMs);
   }
 
+  /**
+   * Ritmo de dibujo mientras se dibuja: mediana de los intervalos entre cuadros
+   * seguidos (los huecos de reposo, de más de 500 ms, no cuentan). null si no
+   * hubo cuadros seguidos suficientes en la historia.
+   */
+  fpsDeDibujo() {
+    const intervalos = [];
+    for (let i = 1; i < this.cuadros.length; i++) {
+      const intervalo = this.cuadros[i] - this.cuadros[i - 1];
+      if (intervalo > 0 && intervalo <= 500) intervalos.push(intervalo);
+    }
+    if (intervalos.length < 5) return null;
+    intervalos.sort((a, b) => a - b);
+    return 1000 / intervalos[Math.floor(intervalos.length / 2)];
+  }
+
   /** true si el promedio estuvo por debajo del mínimo durante `segundosBajoFps` seguidos. */
   debeDegradar(ahora) {
     const activo = this.cuadros.length > 0 && ahora - this.cuadros[this.cuadros.length - 1] < this.actividadMs;
@@ -212,6 +228,8 @@ export function iniciarGuardrail(visor, escena, { sistemasDeParte, alAtenuar, al
   };
   const monitor = new MonitorFps();
   let rendererEnvuelto = null;
+  /** Último ritmo de dibujo medido con cuadros seguidos (null hasta la primera medida). */
+  let ultimoFps = null;
 
   // G7: una sola animación y nunca desde el puente; playActivity queda deshabilitado en embed.
   visor.playActivity = () => Promise.resolve();
@@ -309,6 +327,7 @@ export function iniciarGuardrail(visor, escena, { sistemasDeParte, alAtenuar, al
     if (automatico && ahora - estado.ultimaInteraccion > LIMITES.segundosSinInteraccion * 1000) estado.pausadoPorInactividad = true;
     const info = escena.contexto.renderer?.info.render ?? { triangles: 0, calls: 0 };
     const fps = Math.round(monitor.fps(ahora, LIMITES.intervaloStatsMs) * 10) / 10;
+    ultimoFps = monitor.fpsDeDibujo() ?? ultimoFps;
     alMedir({ fps, triangulos: info.triangles, llamadas: info.calls });
     if (automatico && info.triangles > LIMITES.presupuestoTriangulos) void degradar(true);
   }, LIMITES.intervaloStatsMs);
@@ -347,6 +366,8 @@ export function iniciarGuardrail(visor, escena, { sistemasDeParte, alAtenuar, al
       escena.pedirCuadro();
     },
     registrarInteraccion,
+    /** Ritmo de dibujo más reciente con cuadros seguidos; el reposo no lo baja. */
+    ultimoFps: () => monitor.fpsDeDibujo() ?? ultimoFps,
     /** Cuadros dibujados por motivo desde la última lectura (calibración). */
     leerMotivosCuadro() {
       const copia = { ...estado.motivosCuadro };

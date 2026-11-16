@@ -485,6 +485,7 @@ function setTool(value,toggle=true){
  measurePoints=[];updateCanvasCursor();interaction?.sync();
 }
 renderer.domElement.addEventListener('pointerdown',event=>{
+ if(document.body.classList.contains('embed'))return; /* semiolab-embed */
  if(event.button!==0||multiTouchGesture||tool==='pan')return;
  pointerStart={x:event.clientX,y:event.clientY};pointerDragging=false;
  if(tool==='draw'&&!state.micro){
@@ -498,6 +499,7 @@ renderer.domElement.addEventListener('pointerdown',event=>{
 });
 renderer.domElement.addEventListener('pointerleave',()=>{hoverLabel=null;updateCanvasCursor();renderLabels();});
 renderer.domElement.addEventListener('pointermove',event=>{
+ if(document.body.classList.contains('embed'))return; /* semiolab-embed */
  hoverLabel=null;
  if(event.pointerType!=='touch'&&!event.buttons&&!state.micro&&!motion&&!quizRun?.finding&&['','multi'].includes(tool)){
   const hit=hits(event,true)[0];
@@ -798,6 +800,7 @@ window.addEventListener('keydown',event=>{
 });
 // Read-only diagnostics plus the same view operations used by the UI, for embedding and thumbnail builds.
 window.BodyVista={
+ embed:{controls,camera}, /* semiolab-embed */
  getState:snapshot,getCounts:()=>({loaded:entries.size,total:parts.length,visible:[...entries.values()].filter(e=>e.group.visible).length,systems:loaded.size}),
  getMotionModes:()=>motion?.modes||[],getFlowStats:atlasFlowStats,getEntry:id=>entries.get(id),capture:captureImage,
  showSystem:key=>action(()=>showSystem(key)),showMicro:key=>action(()=>showMicro(key)),showRegion:key=>action(()=>presetRegion(key)),
