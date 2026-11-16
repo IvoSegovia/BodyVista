@@ -328,7 +328,8 @@ export function iniciarGuardrail(visor, escena, { sistemasDeParte, alAtenuar, al
     const info = escena.contexto.renderer?.info.render ?? { triangles: 0, calls: 0 };
     const fps = Math.round(monitor.fps(ahora, LIMITES.intervaloStatsMs) * 10) / 10;
     ultimoFps = monitor.fpsDeDibujo() ?? ultimoFps;
-    alMedir({ fps, triangulos: info.triangles, llamadas: info.calls });
+    // fps_dibujo: mediana entre cuadros seguidos (lo que ve el docente); fps: promedio de 2 s.
+    alMedir({ fps, ...(ultimoFps === null ? {} : { fps_dibujo: Math.round(ultimoFps * 10) / 10 }), triangulos: info.triangles, llamadas: info.calls });
     if (automatico && info.triangles > LIMITES.presupuestoTriangulos) void degradar(true);
   }, LIMITES.intervaloStatsMs);
 
