@@ -604,4 +604,15 @@ export const PARTES = {
   z_987bcbc091445a6a: 'Tronco inferior del plexo braquial derecho',
   z_462fe7a259efc858: 'Tronco simpático derecho',
   z_5f467e0a0e22c16c: 'Primera costilla derecha',
+  // Recorrido anatómico del debriefing (B13).
+  z_103f722cc14b6d08: 'Aurícula derecha',
+  z_f4ed8b7ee1271f34: 'Hígado',
+  z_c72c39d42f9e847f: 'Vena yugular interna derecha',
+  z_3147a61f35a69bbc: 'Tracto corticoespinal lateral',
+  z_401a98e61e6774bc: 'Núcleo motor del nervio facial izquierdo',
+  z_2ad830978b8c83ea: 'Arco aórtico',
+  z_fb939154a41782c4: 'Arteria carótida común izquierda',
+  z_22a0c57970604c1b: 'Arteria carótida interna izquierda',
+  z_cd8fea9c508cf3c4: 'Músculo elevador del párpado superior derecho',
+  z_908c59d5b3f87221: 'Iris derecho',
 };
